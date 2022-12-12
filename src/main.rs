@@ -1,6 +1,7 @@
-use std::{fs::File, io::BufReader, collections::HashMap};
+use std::{fs::File, io::{BufReader, Write}, collections::HashMap, time::SystemTime, alloc::System, process::Stdio, hash::Hash, path::{Path, PathBuf}};
 use serde::{Deserialize, Serialize};
 use regex::Regex;
+use chrono::Local;
 
 #[derive(Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -11,6 +12,7 @@ struct CosyConfig {
     language: Option<String>,
     append_output_for_consecutive_runs: Option<bool>,
     send_output_to_file: Option<String>,
+    shell: Option<String>, //cmd, psh
 }
 
 struct LanguageInformation {
@@ -19,12 +21,12 @@ struct LanguageInformation {
 
 fn main() {
     let language_maps: HashMap<&str, LanguageInformation> = HashMap::from([
-        ("py", LanguageInformation { get_string: Box::new(|file_path| format!("python {file_path}"))}),
-        ("py3", LanguageInformation { get_string: Box::new(|file_path| format!("python3 {file_path}"))}),
-        ("python", LanguageInformation { get_string: Box::new(|file_path| format!("python {file_path}"))}),
-        ("python3", LanguageInformation { get_string: Box::new(|file_path| format!("python3 {file_path}"))}),
-        ("node", LanguageInformation { get_string: Box::new(|file_path| format!("node {file_path}"))}),
-        ("nodejs", LanguageInformation { get_string: Box::new(|file_path| format!("node {file_path}"))}),
+        ("py", LanguageInformation { get_string: Box::new(|file_path| format!("python \"{file_path}\""))}),
+        ("py3", LanguageInformation { get_string: Box::new(|file_path| format!("python3 \"{file_path}\""))}),
+        ("python", LanguageInformation { get_string: Box::new(|file_path| format!("python \"{file_path}\""))}),
+        ("python3", LanguageInformation { get_string: Box::new(|file_path| format!("python3 \"{file_path}\""))}),
+        ("node", LanguageInformation { get_string: Box::new(|file_path| format!("node \"{file_path}\""))}),
+        ("nodejs", LanguageInformation { get_string: Box::new(|file_path| format!("node \"{file_path}\""))}),
     ]);
 
 
@@ -44,12 +46,10 @@ fn main() {
             let reader = BufReader::new(file);
 
             let config: CosyConfig = serde_json::from_reader(reader).expect("Could not read cosy.json. It may be malformed.");
-            
-            let current_directory = std::env::current_dir().unwrap().to_str().unwrap().to_owned();
 
             let main_file_arg = config.main.expect("The 'main' key must be explicitly set because this will be the entry point.");
 
-            let main_file_path = current_directory + &format!("/{main_file_arg}");
+            let main_file_path = std::env::current_dir().unwrap().join(PathBuf::from(main_file_arg)).to_str().unwrap().to_owned();
 
             let la = config.language.expect("The 'lanuage' key must be explicitly set!").to_lowercase();
             let language = la.trim();
@@ -63,12 +63,49 @@ fn main() {
 
             if config.send_output_to_file.is_some() {
                 let override_file_contents = match config.append_output_for_consecutive_runs {
-                    Some(o) => o,
-                    _ => false,
+                    Some(o) => !o,
+                    _ => true,
                 };
 
-                let time_capture_regex = Regex::new(r"#t").unwrap(); //maybe just use str.replace
+                let system_time = Local::now().format("[%Y-%m-%d][%H-%M-%S]").to_string();
+
+                let output_file_name = std::env::current_dir().unwrap().join(PathBuf::from(&config.send_output_to_file.unwrap().replace("@cosy.time", &system_time))).to_str().unwrap().to_owned();
+
+                if override_file_contents {
+                    command_transformed += &format!(" > \"{output_file_name}\"");
+                }
+                else {
+                    command_transformed += &format!(" >> \"{output_file_name}\"");
+                }
             }
+            
+            print!("{command_transformed}");
+
+            let shell_selection = match config.shell {
+                Some(e) => e,
+                None => "cmd".to_string(),
+            };
+
+            let shell_map: HashMap<&str, &str> = HashMap::from([
+                ("psh", "powershell"),
+                ("powershell", "powershell"),
+                ("cmd", "cmd"),
+                ("command", "cmd")
+            ]);
+
+            if !shell_map.contains_key(shell_selection.as_str()) {
+                panic!("{shell_selection} is not a supported shell type!");
+            }
+
+            let mut run_cmd = std::process::Command::new(shell_map.get(shell_selection.as_str()).unwrap());
+
+            run_cmd.current_dir(std::env::current_dir().unwrap().to_str().unwrap().to_owned());
+            run_cmd.arg(command_transformed);
+
+            let out = run_cmd.output().expect("Unable to run command");
+
+            std::io::stdout().write_all(&out.stdout).unwrap();
+            std::io::stderr().write_all(&out.stderr).unwrap();
 
         },
         _ => {

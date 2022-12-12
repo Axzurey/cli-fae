@@ -1,10 +1,11 @@
 {
-    "main": "src/main.py",
+    "main": "cookies\\hello.py",
     "language": "python",
     "args": [],
     "scripts": {
         
     },
     "appendOutputForConsecutiveRuns": false,
-    "sendOutputToFile": "run-log: @[<t>]"
+    "sendOutputToFile": "run-log@cosy.time.txt",
+    "shell": "psh"
 }
