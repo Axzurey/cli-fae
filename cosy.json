@@ -1,0 +1,10 @@
+{
+    "main": "src/main.py",
+    "language": "python",
+    "args": [],
+    "scripts": {
+        
+    },
+    "appendOutputForConsecutiveRuns": false,
+    "sendOutputToFile": "run-log: @[<t>]"
+}
