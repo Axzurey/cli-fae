@@ -60,24 +60,6 @@ fn main() {
             };
 
             let mut command_transformed = (language_information.get_string)(main_file_path);
-
-            if config.send_output_to_file.is_some() {
-                let override_file_contents = match config.append_output_for_consecutive_runs {
-                    Some(o) => !o,
-                    _ => true,
-                };
-
-                let system_time = Local::now().format("[%Y-%m-%d][%H-%M-%S]").to_string();
-
-                let output_file_name = std::env::current_dir().unwrap().join(PathBuf::from(&config.send_output_to_file.unwrap().replace("@cosy.time", &system_time))).to_str().unwrap().to_owned();
-
-                if override_file_contents {
-                    command_transformed += &format!(" > \"{output_file_name}\"");
-                }
-                else {
-                    command_transformed += &format!(" >> \"{output_file_name}\"");
-                }
-            }
             
             print!("{command_transformed}");
 
@@ -97,15 +79,40 @@ fn main() {
                 panic!("{shell_selection} is not a supported shell type!");
             }
 
-            let mut run_cmd = std::process::Command::new(shell_map.get(shell_selection.as_str()).unwrap());
+            let mut cmd = std::process::Command::new(shell_map.get(&shell_selection.as_str()).unwrap());
+            
+            let spl = command_transformed.split_once(" ").expect("unable to parse file path");
 
-            run_cmd.current_dir(std::env::current_dir().unwrap().to_str().unwrap().to_owned());
-            run_cmd.arg(command_transformed);
+            let mut args: Vec<&str> = [
+                spl.0,
+                spl.1,
+            ].into();
+            
+            cmd.args(&args);
 
-            let out = run_cmd.output().expect("Unable to run command");
+            if config.send_output_to_file.is_some() {
+                let override_file_contents = match config.append_output_for_consecutive_runs {
+                    Some(o) => !o,
+                    _ => true,
+                };
 
-            std::io::stdout().write_all(&out.stdout).unwrap();
-            std::io::stderr().write_all(&out.stderr).unwrap();
+                let system_time = Local::now().format("%Y-%m-%d@%H, %M, %S").to_string();
+
+                let output_file_name = std::env::current_dir().unwrap().join(PathBuf::from(&config.send_output_to_file.unwrap().replace("@cosy.time", &system_time))).to_str().unwrap().to_owned();
+            
+                if override_file_contents {
+                    args.push(">");
+                    args.push(&output_file_name);
+                }
+                else {
+                    args.push(">>");
+                    args.push(&output_file_name);
+                }
+            }
+
+            for i in args {
+                println!("{}", i);
+            }
 
         },
         _ => {

@@ -6,6 +6,6 @@
         
     },
     "appendOutputForConsecutiveRuns": false,
-    "sendOutputToFile": "run-log@cosy.time.txt",
-    "shell": "psh"
+    "sendOutputToFile": "run-log.txt",
+    "shell": "cmd"
 }
