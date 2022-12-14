@@ -3,9 +3,10 @@
     "language": "python",
     "args": [],
     "scripts": {
-        
+        "first": "fae install"
     },
     "appendOutputForConsecutiveRuns": false,
-    "sendOutputToFile": "run-log.txt",
-    "shell": "cmd"
+    "sendOutputToFile": "run-log@cosy.time.txt",
+    "shell": "psh",
+    "installationCmd": "pip install cosy.pkg"
 }

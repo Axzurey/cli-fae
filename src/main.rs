@@ -1,6 +1,5 @@
 use std::{fs::File, io::{BufReader, Write}, collections::HashMap, time::SystemTime, alloc::System, process::Stdio, hash::Hash, path::{Path, PathBuf}};
 use serde::{Deserialize, Serialize};
-use regex::Regex;
 use chrono::Local;
 
 #[derive(Serialize, Deserialize)]
@@ -60,8 +59,6 @@ fn main() {
             };
 
             let mut command_transformed = (language_information.get_string)(main_file_path);
-            
-            print!("{command_transformed}");
 
             let shell_selection = match config.shell {
                 Some(e) => e,
@@ -83,12 +80,10 @@ fn main() {
             
             let spl = command_transformed.split_once(" ").expect("unable to parse file path");
 
-            let mut args: Vec<&str> = [
-                spl.0,
-                spl.1,
+            let mut args: Vec<String> = [
+                spl.0.to_owned(),
+                spl.1.to_owned(),
             ].into();
-            
-            cmd.args(&args);
 
             if config.send_output_to_file.is_some() {
                 let override_file_contents = match config.append_output_for_consecutive_runs {
@@ -96,24 +91,28 @@ fn main() {
                     _ => true,
                 };
 
-                let system_time = Local::now().format("%Y-%m-%d@%H, %M, %S").to_string();
+                let system_time = Local::now().format("%Y-%m-%d@%Hh%Mm%Ss").to_string();
 
                 let output_file_name = std::env::current_dir().unwrap().join(PathBuf::from(&config.send_output_to_file.unwrap().replace("@cosy.time", &system_time))).to_str().unwrap().to_owned();
             
                 if override_file_contents {
-                    args.push(">");
-                    args.push(&output_file_name);
+                    args.push(">".to_owned());
+                    args.push(format!("\"{}\"", output_file_name));
                 }
                 else {
-                    args.push(">>");
-                    args.push(&output_file_name);
+                    args.push(">>".to_owned());
+                    args.push(format!("\"{}\"", output_file_name));
                 }
             }
 
+            cmd.args(&args);
+
+            println!("start");
             for i in args {
                 println!("{}", i);
             }
-
+            println!("done");
+            cmd.spawn();
         },
         _ => {
             panic!("{}", format!("{command} is not a valid command!"))
