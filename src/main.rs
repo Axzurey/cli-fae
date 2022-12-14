@@ -1,10 +1,10 @@
-use std::{fs::File, io::{BufReader, Write}, collections::HashMap, time::SystemTime, alloc::System, process::Stdio, hash::Hash, path::{Path, PathBuf}};
+use std::{fs::File, io::BufReader, collections::HashMap, path::PathBuf};
 use serde::{Deserialize, Serialize};
 use chrono::Local;
 
 #[derive(Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct CosyConfig {
+struct FaeConfig {
     main: Option<String>,
     args: Option<Vec<String>>,
     scripts: Option<std::collections::HashMap<String, String>>,
@@ -12,10 +12,29 @@ struct CosyConfig {
     append_output_for_consecutive_runs: Option<bool>,
     send_output_to_file: Option<String>,
     shell: Option<String>, //cmd, psh
+    external_dependencies: Option<std::collections::HashMap<String, String>>,
+    installation_command: Option<String>
 }
 
 struct LanguageInformation {
     get_string: Box<dyn Fn(String) -> String>
+}
+
+fn get_fae_config() -> FaeConfig {
+    let mut config_path = std::env::current_dir().unwrap();
+    config_path.push("fae.config.json"); //the file path
+
+    if !config_path.exists() || config_path.is_dir() {
+        panic!("There exists no fae.json file in this directory.")
+    }
+
+    let file = File::open(config_path).expect("Could not read fae.json file.");
+
+    let reader = BufReader::new(file);
+
+    let config: FaeConfig = serde_json::from_reader(reader).expect("Could not read fae.json. It may be malformed.");
+
+    return config;
 }
 
 fn main() {
@@ -32,19 +51,21 @@ fn main() {
     let command = std::env::args().nth(1).expect("You have not provided a command to execute.");
 
     match command.as_str() {
+        "install" => {
+            let config = get_fae_config();
+
+            let dependencies = match config.external_dependencies {
+                Some(d) => d,
+                _ => HashMap::new()
+            }; //Name, Version
+
+            let package = std::env::args().nth(2).expect("A valid package was not provided.");
+
+            dependencies.push({package});
+        },
         "start" => {
-            let mut config_path = std::env::current_dir().unwrap();
-            config_path.push("cosy.json"); //the file path
 
-            if !config_path.exists() || config_path.is_dir() {
-                panic!("There exists no cosy.json file in this directory.")
-            }
-
-            let file = File::open(config_path).expect("Could not read cosy.json file.");
-
-            let reader = BufReader::new(file);
-
-            let config: CosyConfig = serde_json::from_reader(reader).expect("Could not read cosy.json. It may be malformed.");
+            let config = get_fae_config();
 
             let main_file_arg = config.main.expect("The 'main' key must be explicitly set because this will be the entry point.");
 
@@ -58,7 +79,7 @@ fn main() {
                 _ => panic!("{}", format!("{language} is not supported."))
             };
 
-            let mut command_transformed = (language_information.get_string)(main_file_path);
+            let command_transformed = (language_information.get_string)(main_file_path);
 
             let shell_selection = match config.shell {
                 Some(e) => e,
@@ -93,7 +114,7 @@ fn main() {
 
                 let system_time = Local::now().format("%Y-%m-%d@%Hh%Mm%Ss").to_string();
 
-                let output_file_name = std::env::current_dir().unwrap().join(PathBuf::from(&config.send_output_to_file.unwrap().replace("@cosy.time", &system_time))).to_str().unwrap().to_owned();
+                let output_file_name = std::env::current_dir().unwrap().join(PathBuf::from(&config.send_output_to_file.unwrap().replace("@fae.time", &system_time))).to_str().unwrap().to_owned();
             
                 if override_file_contents {
                     args.push(">".to_owned());
@@ -107,12 +128,7 @@ fn main() {
 
             cmd.args(&args);
 
-            println!("start");
-            for i in args {
-                println!("{}", i);
-            }
-            println!("done");
-            cmd.spawn();
+            cmd.spawn().expect("Unable to spawn a terminal...");
         },
         _ => {
             panic!("{}", format!("{command} is not a valid command!"))

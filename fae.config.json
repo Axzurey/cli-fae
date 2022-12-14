@@ -3,10 +3,11 @@
     "language": "python",
     "args": [],
     "scripts": {
-        "first": "fae install"
+        "first": "fae install-deps"
     },
     "appendOutputForConsecutiveRuns": false,
     "sendOutputToFile": "run-log@cosy.time.txt",
     "shell": "psh",
-    "installationCmd": "pip install cosy.pkg"
+    "installationCmd": "pip install cosy.pkg",
+    "externalDependencies": {}
 }

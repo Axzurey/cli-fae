@@ -1,1 +1,0 @@
-python "C:\Users\343175691\Desktop\cli-fae\cookies\hello.py" > C:\Users\343175691\Desktop\cli-fae\run-log.txt
