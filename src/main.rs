@@ -1,4 +1,4 @@
-use std::{fs::{File, self}, io::BufReader, collections::HashMap, path::PathBuf};
+use std::{fs::{File, self}, io::BufReader, collections::HashMap, path::{PathBuf, Path}};
 use serde::{Deserialize, Serialize};
 use chrono::Local;
 
@@ -13,7 +13,14 @@ struct FaeConfig {
     send_output_to_file: Option<String>,
     shell: Option<String>, //cmd, psh
     external_dependencies: Option<std::collections::HashMap<String, String>>,
-    installation_command: Option<String>
+    installation_command_version: Option<String>,
+    installation_command_latest: Option<String>
+}
+
+#[derive(Serialize, Deserialize, Debug)]
+#[serde(rename_all = "camelCase")]
+struct FaeLock {
+    first_run: Option<bool>
 }
 
 struct LanguageInformation {
@@ -34,17 +41,49 @@ fn get_fae_config() -> FaeConfig {
     let mut config_path = std::env::current_dir().unwrap();
     config_path.push("fae.config.json"); //the file path
 
-    if !config_path.exists() || config_path.is_dir() {
-        panic!("There exists no fae.json file in this directory.")
+    if !Path::new(&config_path).exists() || Path::new(&config_path).is_dir() {
+        panic!("There exists no fae.config.json file in this directory.")
     }
 
-    let file = File::open(config_path).expect("Could not read fae.json file.");
+    let file = File::open(config_path).expect("Could not read fae.config.json file.");
 
     let reader = BufReader::new(file);
 
-    let config: FaeConfig = serde_json::from_reader(reader).expect("Could not read fae.json. It may be malformed.");
+    let config: FaeConfig = serde_json::from_reader(reader).expect("Could not read fae.config.json. It may be malformed.");
 
     return config;
+}
+
+fn get_fae_lock() -> FaeLock {
+    let mut lock_path = std::env::current_dir().unwrap();
+    lock_path.push("fae-lock.json");
+
+    if !Path::new(&lock_path).exists() || Path::new(&lock_path).is_dir() {
+
+        let config = FaeLock {
+            first_run: Some(true),
+        };
+
+        return config;
+    }
+
+    let file = File::open(lock_path).expect("Could not read fae-lock.json file.");
+
+    let reader = BufReader::new(file);
+
+    let config: FaeLock = serde_json::from_reader(reader).expect("Could not read fae-lock.json. It may be malformed.");
+
+    return config;
+}
+
+fn write_to_lock(lock: FaeLock) {
+
+    let buf = Vec::new();
+    let formatter = serde_json::ser::PrettyFormatter::with_indent(b"    ");
+    let mut ser = serde_json::Serializer::with_formatter(buf, formatter);
+    lock.serialize(&mut ser).unwrap();
+
+    fs::write("fae-lock.json", String::from_utf8(ser.into_inner()).unwrap()).expect("Unable to write to config file");
 }
 
 fn get_shell_type() -> String {
@@ -61,11 +100,49 @@ fn get_shell_type() -> String {
         ("cmd", "cmd"),
         ("command", "cmd")
     ]);
-
+    
     if !shell_map.contains_key(shell_selection.as_str()) {
         panic!("{shell_selection} is not a supported shell type!");
     }
     return shell_map.get(shell_selection.as_str()).unwrap().to_string();
+}
+
+fn install_deps() {
+    let config = get_fae_config();
+
+    let dependencies = match config.external_dependencies {
+        Some(d) => d,
+        _ => HashMap::new()
+    }; //Name, Version
+
+    for (package, package_version) in dependencies {
+        let shell = get_shell_type();
+
+        let command = match package_version == "@latest" {
+            true => config.installation_command_latest.as_ref().expect("installationCommandLatest is not set in fae.config.json file"),
+            false => config.installation_command_version.as_ref().expect("installationCommandVersion is not set in fae.config.json file")
+        };
+
+        let final_cmd: String = command.replace("cosy.pkg", &package).replace("cosy.version", &package_version);
+    
+        let mut cmd_args: Vec<&str> = final_cmd.as_str().split(" ").collect();
+        
+        let mut args: Vec<&str> = [].into();
+
+        args.append(&mut cmd_args);
+
+        let mut cmd = std::process::Command::new(shell);
+
+        cmd.args(&args);
+
+        cmd.output().expect("Unable to spawn command terminal");
+    }
+
+    let mut lock = get_fae_lock();
+    lock.first_run = Some(false);
+
+    write_to_lock(lock);
+
 }
 
 fn main() {
@@ -82,6 +159,9 @@ fn main() {
     let command = std::env::args().nth(1).expect("You have not provided a command to execute.");
 
     match command.as_str() {
+        "install-deps" => {
+            install_deps();
+        },
         "install" => {
             let mut config = get_fae_config();
 
@@ -97,27 +177,41 @@ fn main() {
                 _ => "@latest".to_string()
             };
 
-
             let shell = get_shell_type();
-
-            let mut cmd = std::process::Command::new(shell);
         
-            let mut command = config.installation_command.expect("installationCommand is not set in fae.config.json file");
+            let command = match package_version == "@latest" {
+                true => config.installation_command_latest.as_ref().expect("installationCommandLatest is not set in fae.config.json file"),
+                false => config.installation_command_version.as_ref().expect("installationCommandVersion is not set in fae.config.json file")
+            };
 
-            command = command.replace("cosy.pkg", &package).replace("cosy.version", &package_version);
+            let final_cmd: String = command.replace("cosy.pkg", &package).replace("cosy.version", &package_version);
             
-            let mut args: Vec<String> = [
-                
-            ].into();
+            let mut cmd_args: Vec<&str> = final_cmd.as_str().split(" ").collect();
+            
+            let mut args: Vec<&str> = [].into();
+
+            args.append(&mut cmd_args);
 
             dependencies.insert(package, package_version);
 
             config.external_dependencies = Some(dependencies);
 
             write_to_config(config);
+
+            let mut cmd = std::process::Command::new(shell);
+
+            cmd.args(&args);
+
+            cmd.spawn().expect("Unable to spawn command terminal");
             
         },
         "start" => {
+
+            let lock = get_fae_lock();
+
+            if lock.first_run.expect("firstRun is not found in fae-lock.json. It may be malformed") {
+                install_deps();
+            }
 
             let config = get_fae_config();
 

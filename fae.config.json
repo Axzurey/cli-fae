@@ -7,9 +7,10 @@
     "language": "python",
     "appendOutputForConsecutiveRuns": false,
     "sendOutputToFile": "run-log@cosy.time.txt",
-    "shell": "cmd",
+    "shell": "psh",
     "externalDependencies": {
-        "cookieman": "1.4.5"
+        "pygame": "@latest"
     },
-    "installationCommand": "pip install cosy.pkg@cosy.version"
+    "installationCommandVersion": "pip install cosy.pkg==cosy.version",
+    "installationCommandLatest": "pip install cosy.pkg"
 }
