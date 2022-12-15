@@ -1,13 +1,15 @@
 {
     "main": "cookies\\hello.py",
-    "language": "python",
     "args": [],
     "scripts": {
         "first": "fae install-deps"
     },
+    "language": "python",
     "appendOutputForConsecutiveRuns": false,
     "sendOutputToFile": "run-log@cosy.time.txt",
-    "shell": "psh",
-    "installationCmd": "pip install cosy.pkg",
-    "externalDependencies": {}
+    "shell": "cmd",
+    "externalDependencies": {
+        "cookieman": "1.4.5"
+    },
+    "installationCommand": "pip install cosy.pkg@cosy.version"
 }

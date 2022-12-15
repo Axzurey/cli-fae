@@ -1,8 +1,8 @@
-use std::{fs::File, io::BufReader, collections::HashMap, path::PathBuf};
+use std::{fs::{File, self}, io::BufReader, collections::HashMap, path::PathBuf};
 use serde::{Deserialize, Serialize};
 use chrono::Local;
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Debug)]
 #[serde(rename_all = "camelCase")]
 struct FaeConfig {
     main: Option<String>,
@@ -18,6 +18,16 @@ struct FaeConfig {
 
 struct LanguageInformation {
     get_string: Box<dyn Fn(String) -> String>
+}
+
+fn write_to_config(config: FaeConfig) {
+
+    let buf = Vec::new();
+    let formatter = serde_json::ser::PrettyFormatter::with_indent(b"    ");
+    let mut ser = serde_json::Serializer::with_formatter(buf, formatter);
+    config.serialize(&mut ser).unwrap();
+
+    fs::write("fae.config.json", String::from_utf8(ser.into_inner()).unwrap()).expect("Unable to write to config file");
 }
 
 fn get_fae_config() -> FaeConfig {
@@ -37,6 +47,27 @@ fn get_fae_config() -> FaeConfig {
     return config;
 }
 
+fn get_shell_type() -> String {
+    let config = get_fae_config();
+
+    let shell_selection = match config.shell {
+        Some(e) => e,
+        None => "cmd".to_string(),
+    };
+
+    let shell_map: HashMap<&str, &str> = HashMap::from([
+        ("psh", "powershell"),
+        ("powershell", "powershell"),
+        ("cmd", "cmd"),
+        ("command", "cmd")
+    ]);
+
+    if !shell_map.contains_key(shell_selection.as_str()) {
+        panic!("{shell_selection} is not a supported shell type!");
+    }
+    return shell_map.get(shell_selection.as_str()).unwrap().to_string();
+}
+
 fn main() {
     let language_maps: HashMap<&str, LanguageInformation> = HashMap::from([
         ("py", LanguageInformation { get_string: Box::new(|file_path| format!("python \"{file_path}\""))}),
@@ -52,16 +83,39 @@ fn main() {
 
     match command.as_str() {
         "install" => {
-            let config = get_fae_config();
+            let mut config = get_fae_config();
 
-            let dependencies = match config.external_dependencies {
+            let mut dependencies = match config.external_dependencies {
                 Some(d) => d,
                 _ => HashMap::new()
             }; //Name, Version
 
             let package = std::env::args().nth(2).expect("A valid package was not provided.");
 
-            dependencies.push({package});
+            let package_version = match std::env::args().nth(3) {
+                Some(p) => p,
+                _ => "@latest".to_string()
+            };
+
+
+            let shell = get_shell_type();
+
+            let mut cmd = std::process::Command::new(shell);
+        
+            let mut command = config.installation_command.expect("installationCommand is not set in fae.config.json file");
+
+            command = command.replace("cosy.pkg", &package).replace("cosy.version", &package_version);
+            
+            let mut args: Vec<String> = [
+                
+            ].into();
+
+            dependencies.insert(package, package_version);
+
+            config.external_dependencies = Some(dependencies);
+
+            write_to_config(config);
+            
         },
         "start" => {
 
@@ -81,23 +135,9 @@ fn main() {
 
             let command_transformed = (language_information.get_string)(main_file_path);
 
-            let shell_selection = match config.shell {
-                Some(e) => e,
-                None => "cmd".to_string(),
-            };
+            let shell = get_shell_type();
 
-            let shell_map: HashMap<&str, &str> = HashMap::from([
-                ("psh", "powershell"),
-                ("powershell", "powershell"),
-                ("cmd", "cmd"),
-                ("command", "cmd")
-            ]);
-
-            if !shell_map.contains_key(shell_selection.as_str()) {
-                panic!("{shell_selection} is not a supported shell type!");
-            }
-
-            let mut cmd = std::process::Command::new(shell_map.get(&shell_selection.as_str()).unwrap());
+            let mut cmd = std::process::Command::new(shell);
             
             let spl = command_transformed.split_once(" ").expect("unable to parse file path");
 
