@@ -1,16 +1,13 @@
 {
-    "main": "cookies\\hello.py",
-    "args": [],
+    "main": "src/main.py",
     "scripts": {
-        "first": "fae install-deps"
+        
     },
     "language": "python",
     "appendOutputForConsecutiveRuns": false,
-    "sendOutputToFile": "run-log@cosy.time.txt",
+    "sendOutputToFile": null,
     "shell": "psh",
-    "externalDependencies": {
-        "pygame": "@latest"
-    },
+    "externalDependencies": {},
     "installationCommandVersion": "pip install cosy.pkg==cosy.version",
     "installationCommandLatest": "pip install cosy.pkg"
 }

@@ -1,4 +1,5 @@
-use std::{fs::{File, self}, io::BufReader, collections::HashMap, path::{PathBuf, Path}};
+use std::{fs::{File, self}, io::BufReader, collections::HashMap, path::{PathBuf, Path}, process::Stdio};
+use execute::{shell, Execute};
 use serde::{Deserialize, Serialize};
 use chrono::Local;
 
@@ -6,7 +7,6 @@ use chrono::Local;
 #[serde(rename_all = "camelCase")]
 struct FaeConfig {
     main: Option<String>,
-    args: Option<Vec<String>>,
     scripts: Option<std::collections::HashMap<String, String>>,
     language: Option<String>,
     append_output_for_consecutive_runs: Option<bool>,
@@ -145,6 +145,20 @@ fn install_deps() {
 
 }
 
+fn get_default_python_configuration() -> FaeConfig {
+    return FaeConfig {
+        main: Some("src/main.py".to_owned()),
+        scripts: Some(HashMap::new()),
+        language: Some("python".to_owned()),
+        append_output_for_consecutive_runs: Some(false),
+        send_output_to_file: None,
+        shell: Some("psh".to_string()), //cmd, psh
+        external_dependencies: Some(HashMap::new()),
+        installation_command_version: Some("pip install cosy.pkg==cosy.version".to_owned()),
+        installation_command_latest: Some("pip install cosy.pkg".to_owned())
+    }
+}
+
 fn main() {
     let language_maps: HashMap<&str, LanguageInformation> = HashMap::from([
         ("py", LanguageInformation { get_string: Box::new(|file_path| format!("python \"{file_path}\""))}),
@@ -159,6 +173,36 @@ fn main() {
     let command = std::env::args().nth(1).expect("You have not provided a command to execute.");
 
     match command.as_str() {
+        "run" => {
+            let config = get_fae_config();
+
+            let arg = std::env::args().nth(2).expect("You have not provided a script that should be run");
+
+            let scripts = config.scripts.expect("scripts property isn't set in the config file");
+        
+            let command = scripts.get(&arg).expect("That script isn't provided in the config file");
+
+            let mut cmd = shell(command);
+
+            cmd.stdout(Stdio::piped());
+
+            let output = cmd.execute_output().unwrap();
+
+            println!("{}", String::from_utf8(output.stdout).unwrap());
+        }
+        "init" => {
+            let args: Vec<String> = std::env::args().collect();
+            
+            for arg in args {
+                if arg == "--python" {
+                    write_to_config(get_default_python_configuration());
+                    print!("created a default python fae project");
+                    return;
+                }
+            }
+
+            panic!("No flags have been set. Use one for your language. Eg: --python");
+        },
         "install-deps" => {
             install_deps();
         },
